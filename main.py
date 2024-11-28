@@ -3,6 +3,7 @@ from modal import (
     Image,
     Mount,
     wsgi_app,
+    Volume
 )
 
 image = (
@@ -24,7 +25,7 @@ image = (
 
 app = App("yolo-server")
 
-@app.function(image=image, mounts=[Mount.from_local_python_packages("yolo_backend")])
+@app.function(image=image, mounts=[Mount.from_local_python_packages("yolo_backend")], volumes={"/my_vol": Volume.from_name("my-test-volume")})
 @wsgi_app()
 def flask_app():
     import time
@@ -38,7 +39,9 @@ def flask_app():
 
     import yolo_backend
 
-    # Create necessary directories
+
+    import os  
+    print(os.path.exists('/content/yolo-server/yolo5small.pt'))    # Create necessary directories
     DATA_PATH = Path("data")
     to_create = [str(DATA_PATH), "data/to_prc", "data/gen_img"]
     for fpath in to_create:
@@ -60,13 +63,17 @@ def flask_app():
         )
 
         image_data = BytesIO(base64.b64decode(file))
-        result = yolo_backend.predict_and_draw(
-            image_data,
-            DATA_PATH / "gen_img" / f"{cur_id}.jpg",
-        ) | {"gen_img": f"gen_img/{cur_id}.jpg"}
+        try:
+          result = yolo_backend.predict_and_draw(
+              image_data,
+              DATA_PATH / "gen_img" / f"{cur_id}.jpg",
+          ) | {"gen_img": f"gen_img/{cur_id}.jpg"}
 
-        pprint(result)
-        return jsonify(result)
+          pprint(result)
+          return jsonify(result)
+        except ValueError:
+          result = {"gen_img": f"gen_img/{cur_id}.jpg"}
+          return jsonify(result)
 
     @app.route("/gen_img/<path:filepath>")
     def gen_img(filepath):
